@@ -1,0 +1,24 @@
+# Virtual Environment
+.venv/
+venv/
+*.pyc
+
+# Caches
+__pycache__/
+.pytest_cache/
+
+# Environment files
+.env
+.env.*
+
+# Secrets
+.secrets/  # <-- ВОТ ЭТА СТРОКА ЗАЩИЩАЕТ ПАПКУ
+*.json
+
+# Secrets
+.secrets/
+*.json
+
+# Log and output files
+*.log
+output.log
