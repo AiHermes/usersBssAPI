@@ -1,42 +1,37 @@
 import os
-import json
 import logging
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Загружаем переменные из .env файла
 load_dotenv()
 
-def initialize_firebase():
-    """Инициализирует Firebase Admin SDK, если он еще не был инициализирован."""
-    if not firebase_admin._apps:
-        logging.info("Инициализация Firebase...")
-        try:
-            # Пытаемся получить креды из переменной окружения (для Railway)
-            firebase_creds_json_str = os.getenv("FIREBASE_CREDENTIALS_JSON")
-            if firebase_creds_json_str:
-                cred_dict = json.loads(firebase_creds_json_str)
-                cred = credentials.Certificate(cred_dict)
-                logging.info("Firebase инициализирован из переменной окружения.")
-            else:
-                # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-                # Иначе ищем локальный файл по указанному вами пути
-                cred_path = ".secrets/bss2025-b1285-firebase-adminsdk-fbsvc-d578014c5e.json"
-                logging.info(f"Ищем ключ Firebase по локальному пути: {cred_path}")
-                cred = credentials.Certificate(cred_path)
-            
-            firebase_admin.initialize_app(cred)
-            logging.info("✅ Firebase успешно инициализирован.")
-        except Exception as e:
-            # Выводим более детальную ошибку, если файл все равно не найден
-            if isinstance(e, FileNotFoundError):
-                 logging.error(f"❌ Файл ключа не найден по пути: {cred_path}. Убедитесь, что он на месте.")
-            else:
-                logging.exception(f"❌ Непредвиденная ошибка при инициализации Firebase: {e}")
-            return None
-    
-    return firestore.client()
+# Глобальная переменная для хранения одного экземпляра клиента БД
+_db_client = None
 
-# Инициализируем и экспортируем клиент БД для использования в других модулях
-db = initialize_firebase()
+def get_db_client():
+    """
+    Возвращает клиент Firestore. 
+    Инициализирует Firebase при первом вызове.
+    """
+    global _db_client
+    if _db_client is None:
+        logging.info("[CONFIG] Создаю или обновляю подключение к Firebase...")
+        try:
+            # Проверяем, было ли уже инициализировано приложение
+            if not firebase_admin._apps:
+                creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+                if not creds_path:
+                    logging.error("Переменная GOOGLE_APPLICATION_CREDENTIALS не установлена!")
+                    return None
+                
+                cred = credentials.Certificate(creds_path)
+                firebase_admin.initialize_app(cred)
+                logging.info("✅ [CONFIG] Приложение Firebase успешно инициализировано.")
+
+            _db_client = firestore.client()
+        except Exception as e:
+            logging.exception(f"❌ [CONFIG] Ошибка при инициализации Firebase: {e}")
+            return None # Возвращаем None в случае ошибки
+            
+    return _db_client
