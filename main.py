@@ -2,16 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from config import get_db_client
-from routers import wallets_router, subscriptions_router
 
-# --- УБЕДИТЕСЬ, ЧТО ЭТОТ БЛОК НА МЕСТЕ ---
-# Он создает основной экземпляр приложения под именем 'app'
+# Импортируем все наши роутеры
+from routers import wallets_router, subscriptions_router, checkin_router, blofin_router, bybit_router
+
 app = FastAPI(
     title="BssMiniApp API",
     description="Сервис для генерации кошельков и обработки API для BssMiniApp.",
     version="1.0.0"
 )
-# ----------------------------------------
 
 # Блок настройки CORS
 origins = ["*"]
@@ -23,9 +22,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Подключаем роутеры
+# Подключаем все роутеры к приложению
 app.include_router(wallets_router.router, prefix="/api", tags=["Wallets"])
 app.include_router(subscriptions_router.router, prefix="/api", tags=["Subscriptions"])
+app.include_router(checkin_router.router, prefix="/api", tags=["Check-in"])
+app.include_router(blofin_router.router, prefix="/api/blofin", tags=["BloFin"])
+# Убедитесь, что эта строка есть
+app.include_router(bybit_router.router, prefix="/api/bybit", tags=["Bybit"])
 
 
 @app.get("/", tags=["Root"])
