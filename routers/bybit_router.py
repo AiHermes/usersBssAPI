@@ -1,20 +1,25 @@
 from fastapi import APIRouter, HTTPException
-from services.bybit_service import is_user_direct_referral
+from pydantic import BaseModel
+# Импортируем только ту функцию, которая нам нужна
+from services.bybit_service import link_bybit_uid
 
 router = APIRouter()
 
-# Оставляем только основной эндпоинт
-@router.get("/check_bybit_referral/{user_uid}")
-async def check_bybit_referral_endpoint(user_uid: str):
+class BybitLinkRequest(BaseModel):
+    telegram_id: str
+    bybit_uid: str
+
+@router.post("/link-uid")
+async def link_bybit_uid_endpoint(request: BybitLinkRequest):
     """
-    Эндпоинт для проверки статуса прямого реферала Bybit по UID.
+    Эндпоинт для проверки и привязки Bybit UID к пользователю Telegram.
     """
-    if not user_uid:
-        raise HTTPException(status_code=400, detail="UID пользователя не указан.")
+    if not request.telegram_id or not request.bybit_uid:
+        raise HTTPException(status_code=400, detail="Необходимо указать telegram_id и bybit_uid.")
     
-    is_referral = is_user_direct_referral(user_uid)
+    result = link_bybit_uid(telegram_id=request.telegram_id, bybit_uid=request.bybit_uid)
     
-    return {
-        "uid": user_uid,
-        "is_direct_referral": is_referral
-    }
+    if result["status"] == "error":
+        raise HTTPException(status_code=409, detail=result["message"])
+        
+    return result
