@@ -14,6 +14,7 @@ async def link_bybit_uid_endpoint(request: BybitLinkRequest):
     """
     Эндпоинт для проверки и привязки Bybit UID к пользователю Telegram.
     """
+    print(f"[DEBUG] Получено тело запроса: {request.dict()}")
     if not request.telegram_id or not request.bybit_uid:
         raise HTTPException(status_code=400, detail="Необходимо указать telegram_id и bybit_uid.")
     
