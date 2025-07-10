@@ -37,13 +37,14 @@ def create_initial_user_record(telegram_id: str) -> dict:
             
             # Данные по биржам
             "bybit_uid": "",
-            "bybit_kyc": False,
+            "bybit_kyc": "",
             "bybit14days": False, # Предполагаю, что это тоже булево поле
             "blofin_uid": "",
+            "blofin_kyc": "",
             "blofin4days": False,
             "blofin10days": False,
             "bingx_uid": "",
-            "bingx_kyc": False,
+            "bingx_kyc": "",
             "bingx4days": False,
             "bingx14days": False,
 
