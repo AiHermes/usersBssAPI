@@ -1,66 +1,138 @@
 import os
-import hmac
-import base64
 import logging
-from datetime import datetime, timezone
-import requests
+import hmac
+import hashlib
+import base64
 import json
-from uuid import uuid4 # <-- 1. Импортируем генератор для nonce
+import time
+import uuid
+import requests
+from google.cloud import firestore
+from dotenv import load_dotenv
 
-# ... (API_KEY, SECRET_KEY, и т.д. остаются без изменений)
+# Загрузка .env переменных
+load_dotenv()
+
+# Инициализация Firestore
+db = firestore.Client()
+
+# Ключи из .env
 API_KEY = os.getenv("BLOFIN_API_KEY")
-SECRET_KEY = os.getenv("BLOFIN_SECRET_KEY")
-PASSPHRASE = os.getenv("BLOFIN_PASSPHRASE")
-BASE_URL = "https://api.blofin.com"
+API_SECRET = os.getenv("BLOFIN_API_SECRET")
+API_PASSPHRASE = os.getenv("BLOFIN_API_PASSPHRASE")
 
+if not all([API_KEY, API_SECRET, API_PASSPHRASE]):
+    logging.error("❌ Не заданы переменные окружения для BloFin API")
 
-def _get_signature(timestamp: str, method: str, request_path: str, nonce: str, body: str = "") -> str:
-    """Генерирует подпись для запроса, включая nonce."""
-    # --- ИЗМЕНЕНИЕ ЗДЕСЬ: Собираем строку как в документации ---
-    message = request_path + method.upper() + timestamp + nonce + body
-    
-    mac = hmac.new(bytes(SECRET_KEY, 'utf-8'), bytes(message, 'utf-8'), digestmod='sha256')
-    
-    # --- ИЗМЕНЕНИЕ ЗДЕСЬ: Сначала в hex, потом в base64 ---
-    hex_signature = mac.hexdigest().encode('utf-8')
-    return base64.b64encode(hex_signature).decode('utf-8')
+# 🔐 Подпись запроса
+def create_signature(path: str, method: str, timestamp: str, nonce: str, body: dict | None = None) -> str:
+    if body:
+        body_str = json.dumps(body, separators=(',', ':'))
+        prehash = f"{path}{method}{timestamp}{nonce}{body_str}"
+    else:
+        prehash = f"{path}{method}{timestamp}{nonce}"
 
+    logging.info(f"[BLOFIN] Prehash string: {prehash}")
+    hex_digest = hmac.new(API_SECRET.encode(), prehash.encode(), hashlib.sha256).hexdigest()
+    signature = base64.b64encode(hex_digest.encode()).decode()
+    logging.info(f"[BLOFIN] Signature (Base64): {signature}")
+    return signature
 
-def test_blofin_connection() -> dict:
-    """
-    Тестовая функция с правильной подписью.
-    """
-    if not all([API_KEY, SECRET_KEY, PASSPHRASE]):
-        # ...
-        return {"status": "error", "message": "API ключи не настроены"}
+# 🔍 Проверка UID в списке приглашённых
+def find_uid_in_invitees(target_uid: str, limit: int = 30, max_pages: int = 50) -> bool:
+    base_path = "/api/v1/affiliate/invitees"
+    method = "GET"
 
-    try:
-        method = "GET"
-        request_path = "/api/v1/account/balance"
-        
-        timestamp = str(int(datetime.now().timestamp() * 1000))
-        nonce = str(uuid4()) # <-- 2. Генерируем nonce
+    for page in range(1, max_pages + 1):
+        timestamp = str(int(time.time() * 1000))
+        nonce = str(uuid.uuid4())
+        query = f"?limit={limit}&page={page}"
+        full_path = f"{base_path}{query}"
 
-        # Генерируем подпись, передавая nonce
-        signature = _get_signature(timestamp, method, request_path, nonce)
+        signature = create_signature(full_path, method, timestamp, nonce)
 
-        # Формируем заголовки, добавляя nonce
         headers = {
             "ACCESS-KEY": API_KEY,
             "ACCESS-SIGN": signature,
             "ACCESS-TIMESTAMP": timestamp,
-            "ACCESS-NONCE": nonce, # <-- 3. Добавляем nonce в заголовки
-            "ACCESS-PASSPHRASE": PASSPHRASE,
+            "ACCESS-NONCE": nonce,
+            "ACCESS-PASSPHRASE": API_PASSPHRASE,
             "Content-Type": "application/json"
         }
 
-        # ... (остальной код запроса и вывода остается без изменений) ...
-        response = requests.get(BASE_URL + request_path, headers=headers)
-        print(f"Status Code: {response.status_code}")
-        print(json.dumps(response.json(), indent=2))
-        response.raise_for_status()
-        return response.json()
+        url = f"https://openapi.blofin.com{full_path}"
+        logging.info(f"[BLOFIN] 🔄 Партия {page}, запрос к {url}")
 
-    except Exception as e:
-        # ...
-        return {"status": "error", "message": str(e)}
+        try:
+            response = requests.get(url, headers=headers)
+            logging.info(f"[BLOFIN] Статус ответа: {response.status_code}")
+            data = response.json()
+            logging.info(f"[BLOFIN] Ответ: {data}")
+        except Exception:
+            logging.exception("[BLOFIN] ❌ Ошибка запроса")
+            break
+
+        if data.get("code") not in ("0", "200"):
+            logging.warning(f"[BLOFIN] ⚠️ Ошибка API: {data.get('msg')}")
+            break
+
+        invitees = data.get("data", [])
+        for invitee in invitees:
+            if str(invitee.get("uid")) == str(target_uid):
+                logging.info(f"[BLOFIN] ✅ UID найден: {target_uid}")
+                return True
+
+        if len(invitees) < limit:
+            logging.info("[BLOFIN] 🔚 Конец списка — UID не найден")
+            break
+
+    logging.warning(f"[BLOFIN] ❌ UID {target_uid} не найден")
+    return False
+
+# 🔎 Внешняя проверка
+def check_blofin_uid(blofin_uid: str) -> bool:
+    return find_uid_in_invitees(blofin_uid)
+
+# 🔗 Привязка UID к Telegram ID
+def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
+    logging.info(f"[BLOFIN] Привязка UID {blofin_uid} к Telegram ID {telegram_id}")
+
+    # Проверка UID через API
+    uid_exists = check_blofin_uid(blofin_uid)
+    if not uid_exists:
+        logging.warning(f"[BLOFIN] ❌ UID {blofin_uid} не найден")
+        return {"status": "error", "message": "ERROR_NOT_FOUND"}
+
+    try:
+        users_ref = db.collection("telegram_users")
+
+        # Проверка, не занят ли UID другим пользователем
+        query = users_ref.where("blofin_uid", "==", str(blofin_uid)).limit(1).stream()
+        existing_users = list(query)
+
+        if existing_users:
+            existing_doc = existing_users[0]
+            logging.warning(f"[BLOFIN] UID {blofin_uid} уже привязан к Telegram ID {existing_doc.id}")
+            if existing_doc.id != telegram_id:
+                return {"status": "error", "message": "ERROR_TAKEN"}
+            else:
+                logging.info(f"[BLOFIN] UID {blofin_uid} уже был привязан к этому пользователю.")
+                return {"status": "success", "telegram_id": telegram_id, "uid": blofin_uid}
+
+        user_ref = users_ref.document(telegram_id)
+        user_doc = user_ref.get()
+
+        if not user_doc.exists:
+            logging.error(f"[BLOFIN] ❌ Пользователь с telegram_id {telegram_id} не найден в базе.")
+            return {"status": "error", "message": "ERROR_UNKNOWN"}
+
+        # Привязка UID
+        user_ref.update({
+            "blofin_uid": str(blofin_uid)
+        })
+        logging.info(f"[BLOFIN] ✅ Привязка успешна")
+        return {"status": "success", "telegram_id": telegram_id, "uid": blofin_uid}
+
+    except Exception:
+        logging.exception("[BLOFIN] ❌ Firestore ошибка")
+        return {"status": "error", "message": "Firestore error"}

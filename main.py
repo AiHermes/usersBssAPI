@@ -38,12 +38,14 @@ app.add_middleware(
 )
 
 # Подключение роутеров
+logger.info("🔗 Подключение роутеров...")
 app.include_router(wallets_router.router, prefix="/api", tags=["Wallets"])
 app.include_router(subscriptions_router.router, prefix="/api", tags=["Subscriptions"])
 app.include_router(checkin_router.router, prefix="/api", tags=["Check-in"])
 app.include_router(blofin_router.router, prefix="/api/blofin", tags=["BloFin"])
 app.include_router(bybit_router.router, prefix="/api/bybit", tags=["Bybit"])
 app.include_router(user_router.router, prefix="/api", tags=["Users"])
+logger.info("✅ Все роутеры подключены")
 
 @app.get("/", tags=["Root"])
 def read_root():
