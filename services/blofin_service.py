@@ -38,8 +38,8 @@ def create_signature(path: str, method: str, timestamp: str, nonce: str, body: d
     logging.info(f"[BLOFIN] Signature (Base64): {signature}")
     return signature
 
-# 🔍 Проверка UID в списке приглашённых
-def find_uid_in_invitees(target_uid: str, limit: int = 30, max_pages: int = 50) -> bool:
+# 🔍 Проверка UID и KYC
+def find_uid_info(target_uid: str, limit: int = 30, max_pages: int = 50) -> dict | None:
     base_path = "/api/v1/affiliate/invitees"
     method = "GET"
 
@@ -80,27 +80,22 @@ def find_uid_in_invitees(target_uid: str, limit: int = 30, max_pages: int = 50) 
         for invitee in invitees:
             if str(invitee.get("uid")) == str(target_uid):
                 logging.info(f"[BLOFIN] ✅ UID найден: {target_uid}")
-                return True
+                return invitee  # Возвращаем весь объект
 
         if len(invitees) < limit:
             logging.info("[BLOFIN] 🔚 Конец списка — UID не найден")
             break
 
     logging.warning(f"[BLOFIN] ❌ UID {target_uid} не найден")
-    return False
-
-# 🔎 Внешняя проверка
-def check_blofin_uid(blofin_uid: str) -> bool:
-    return find_uid_in_invitees(blofin_uid)
+    return None
 
 # 🔗 Привязка UID к Telegram ID
 def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
     logging.info(f"[BLOFIN] Привязка UID {blofin_uid} к Telegram ID {telegram_id}")
 
-    # Проверка UID через API
-    uid_exists = check_blofin_uid(blofin_uid)
-    if not uid_exists:
-        logging.warning(f"[BLOFIN] ❌ UID {blofin_uid} не найден")
+    uid_info = find_uid_info(blofin_uid)
+    if not uid_info:
+        logging.warning(f"[BLOFIN] Ошибка проверки UID: UID not found")
         return {"status": "error", "message": "ERROR_NOT_FOUND"}
 
     try:
@@ -126,10 +121,18 @@ def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
             logging.error(f"[BLOFIN] ❌ Пользователь с telegram_id {telegram_id} не найден в базе.")
             return {"status": "error", "message": "ERROR_UNKNOWN"}
 
-        # Привязка UID
-        user_ref.update({
+        update_data = {
             "blofin_uid": str(blofin_uid)
-        })
+        }
+
+        kyc_level = int(uid_info.get("kycLevel", 0))
+        if kyc_level > 0:
+            logging.info(f"[BLOFIN] ✅ У UID {blofin_uid} есть KYC")
+            update_data["blofin_kyc"] = "KYC"
+        else:
+            logging.info(f"[BLOFIN] ⛔ У UID {blofin_uid} нет KYC")
+
+        user_ref.update(update_data)
         logging.info(f"[BLOFIN] ✅ Привязка успешна")
         return {"status": "success", "telegram_id": telegram_id, "uid": blofin_uid}
 
