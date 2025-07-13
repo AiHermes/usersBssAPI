@@ -2,13 +2,11 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from config import get_db_client
+from config import get_db_client, setup_logger  # 👈 добавили setup_logger
 
-# Настройка базового логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-)
+# 🟢 Инициализация логгера
+setup_logger()  # 👈 вызываем до создания логгера
+
 logger = logging.getLogger(__name__)
 
 # Импорт роутеров
@@ -18,7 +16,8 @@ from routers import (
     checkin_router,
     blofin_router,
     bybit_router,
-    user_router
+    user_router,
+    bingx_router  # 🆕 Добавлен роутер BingX
 )
 
 app = FastAPI(
@@ -45,6 +44,7 @@ app.include_router(checkin_router.router, prefix="/api", tags=["Check-in"])
 app.include_router(blofin_router.router, prefix="/api/blofin", tags=["BloFin"])
 app.include_router(bybit_router.router, prefix="/api/bybit", tags=["Bybit"])
 app.include_router(user_router.router, prefix="/api", tags=["Users"])
+app.include_router(bingx_router.router, prefix="/api/bingx", tags=["BingX"])
 logger.info("✅ Все роутеры подключены")
 
 @app.get("/", tags=["Root"])
