@@ -1,3 +1,4 @@
+# services/wallet_service.py
 import logging
 from web3 import Account
 from config import get_db_client

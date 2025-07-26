@@ -1,5 +1,3 @@
-Запуск локального сервера и проброска ip
-./run_local.sh
 
 source .venv/bin/activate
 

@@ -1,3 +1,4 @@
+# routers/wallets_router.py
 from fastapi import APIRouter, Body, HTTPException
 import logging
 from services.wallet_service import create_new_wallet_for_user
