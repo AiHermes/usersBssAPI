@@ -1,7 +1,7 @@
 # routers/user_router.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from services.user_service import create_initial_user_record
+from services.services.deleted.user_service import create_initial_user_record
 
 router = APIRouter()
 

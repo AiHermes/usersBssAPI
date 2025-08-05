@@ -186,7 +186,7 @@ def _write_alerts_and_messages(user_ref, telegram_id, message_text):
         "created_at": now,
         "memo": {"text": message_text},
         "image_url": BONUS_IMAGE_URL,
-        "status": "Pending",
+        "status": "pending",
         "telegram_id": telegram_id
     })
     logging.info(f"[BLOFIN] 💬 Создано сообщение для Telegram")
