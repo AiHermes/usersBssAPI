@@ -1,9 +1,9 @@
-# services/firebase_service.py
-
+# filename: services/firebase_service.py
 import os
+import hashlib
+import logging
 import firebase_admin
 from firebase_admin import auth, credentials
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,23 @@ else:
 
 def create_custom_token(telegram_id: int) -> str:
     """
-    Генерирует Firebase custom token для пользователя с указанным Telegram ID.
-    UID в формате 'telegram:{id}'.
+    Генерирует Firebase Custom Token для пользователя с указанным Telegram ID.
+    UID = "<telegram_id>" (строго равен Telegram ID, без префиксов).
     """
     try:
-        uid = f"telegram:{telegram_id}"
+        uid = str(telegram_id)  # <-- UID теперь равен телеграм-ID
         token = auth.create_custom_token(uid).decode("utf-8")
-        logger.info(f"[FIREBASE_SERVICE] 🔐 Сгенерирован Firebase токен для {uid}")
+
+        # 🔐 Логируем хеш токена и его начало (безопасно)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        token_snippet = token[:20]
+
+        logger.info(f"[FIREBASE_SERVICE] 🔐 Сгенерирован Firebase токен для UID={uid}")
+        logger.info(f"[FIREBASE_SERVICE] 🔑 Хеш токена: {token_hash}")
+        logger.info(f"[FIREBASE_SERVICE] 🔑 Начало токена: {token_snippet}...")
+
         return token
+
     except Exception as e:
         logger.exception(f"[FIREBASE_SERVICE] ❌ Ошибка при создании токена для {telegram_id}: {e}")
         raise

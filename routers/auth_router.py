@@ -1,19 +1,17 @@
-# routers/auth_router.py
-
+# filename: routers/auth_router.py
 from fastapi import APIRouter
 from pydantic import BaseModel
 from services.auth_service import validate_telegram_init_data
 from services.firebase_service import create_custom_token
+from services.user_service import find_user_and_status
 
 import urllib.parse
 import json
 
 router = APIRouter()
 
-
 class InitDataRequest(BaseModel):
     init_data: str
-
 
 @router.post("/auth/telegram")
 async def telegram_auth(data: InitDataRequest):
@@ -21,21 +19,21 @@ async def telegram_auth(data: InitDataRequest):
     print(f"📥 Raw init_data (incoming): {data.init_data[:300]}...")
 
     if data.init_data.strip().lower() == "test":
-        print("🧪 Test mode triggered — returning mock response")
+        # В тестовом режиме покажем вариант 'ok'
         return {
-            "ok": True,
+            "ok": "ok",
             "telegram_id": "123456789",
             "firebase_token": "example_token_for_testing_purposes"
         }
 
-    # 🧩 Попробуем распарсить initData как query string
+    # Разбор initData (не обязателен для логики, просто лог)
     try:
         parsed_data = urllib.parse.parse_qs(data.init_data)
         parsed_dict = {k: v[0] for k, v in parsed_data.items()}
         print(f"📦 Parsed init_data (dict): {parsed_dict}")
     except Exception as e:
         print(f"❌ Failed to parse init_data: {e}")
-        return {"ok": False, "error": "Failed to parse init_data"}
+        return {"ok": "parse_error", "error": "Failed to parse init_data"}
 
     print("🔍 Отправляем данные в валидацию Telegram...")
     user_data = validate_telegram_init_data(data.init_data)
@@ -43,7 +41,7 @@ async def telegram_auth(data: InitDataRequest):
 
     if not user_data:
         print("❌ Validation failed: Invalid Telegram initData")
-        return {"ok": False, "error": "Invalid Telegram initData"}
+        return {"ok": "invalid_init_data", "error": "Invalid Telegram initData"}
 
     print(f"✅ Validation successful. Raw user_data: {user_data}")
 
@@ -54,7 +52,7 @@ async def telegram_auth(data: InitDataRequest):
             print("🔓 Parsed user_info from string.")
         except Exception as e:
             print(f"❗ JSON parsing error: {e}")
-            return {"ok": False, "error": "Failed to parse user info"}
+            return {"ok": "parse_user_error", "error": "Failed to parse user info"}
     else:
         user_info = user_str
         print("🔓 user_info is already a dict.")
@@ -62,11 +60,29 @@ async def telegram_auth(data: InitDataRequest):
     telegram_id = user_info.get("id")
     print(f"🆔 Telegram ID: {telegram_id}")
 
-    firebase_token = create_custom_token(telegram_id)
-    print(f"🔑 Firebase token generated.")
+    # ✅ Новая логика: проверяем наличие пользователя и статус до получения токена
+    exists, status_tgbss, user_path, _ = find_user_and_status(int(telegram_id))
 
+    if not exists:
+        # нет записи в БД — отправляем в бота регистрироваться
+        return {
+            "ok": "noregbot",
+            "telegram_id": str(telegram_id),
+        }
+
+    if str(status_tgbss).lower() != "active":
+        # запись есть, но статус не активен — бот «выключен»
+        return {
+            "ok": "botisoff",
+            "telegram_id": str(telegram_id),
+            "status_tgbss": status_tgbss,
+        }
+
+    # всё ок — выдаём кастом‑токен Firebase
+    firebase_token = create_custom_token(telegram_id)
+    print("🔑 Firebase token generated.")
     return {
-        "ok": True,
+        "ok": "ok",
         "telegram_id": str(telegram_id),
         "firebase_token": firebase_token,
     }

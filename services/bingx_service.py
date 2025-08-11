@@ -1,3 +1,4 @@
+ #bingx_service.py
 import os
 import time
 import hmac
