@@ -1,13 +1,21 @@
 # main.py
 import logging
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from config import get_db_client, setup_logger
 
-# 🟢 Инициализация логгера
-setup_logger()
+# 🟢 Инициализация логгера с выводом в stdout
+def setup_stdout_logger():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
+
+setup_stdout_logger()
 logger = logging.getLogger("BssMiniApp")
 
 # Импорт роутеров
@@ -70,5 +78,5 @@ if __name__ == "__main__":
     logger.info("🚀 Запуск BssMiniApp API на http://0.0.0.0:8000")
     try:
         uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-    except Exception as e:
-        logger.exception(f"❌ Ошибка при запуске Uvicorn: {e}")
+    except Exception:
+        logger.exception("❌ Ошибка при запуске Uvicorn")
