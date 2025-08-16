@@ -1,12 +1,13 @@
+# filename: main.py
 import logging
 import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from config import get_db_client  # setup_logger не нужен, мы сами настроим stdout-хендлер
+from services.firebase_service import get_db_client  # унифицированный доступ к Firestore
 
-# 🟢 Логи в STDOUT (Railway не будет помечать их как error)
+# 🟢 Логи в STDOUT (чтобы Railway не красил их в error)
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] %(levelname)s - %(message)s",
@@ -23,7 +24,7 @@ from routers import (
     bybit_router,
     user_router,
     bingx_router,
-    auth_router
+    auth_router,
 )
 
 app = FastAPI(
@@ -53,20 +54,20 @@ app.include_router(bingx_router.router, prefix="/api/bingx", tags=["BingX"])
 app.include_router(auth_router.router, prefix="/api", tags=["Auth"])
 logger.info("✅ Все роутеры подключены")
 
+
 @app.get("/", tags=["Root"])
 def read_root():
-    """Корневой эндпоинт для проверки работы сервиса."""
-    logger.info("[ROOT] Проверка подключения к базе данных...")
-    db = get_db_client()
-    if not db:
-        logger.warning("[ROOT] ❌ Не удалось подключиться к базе данных.")
-        return {"status": "error", "message": "Failed to connect to Database"}
-    logger.info("[ROOT] ✅ API готов к работе.")
+    """Корневой эндпоинт."""
     return {"status": "ok", "message": "Welcome to BssMiniApp API"}
 
+
+@app.get("/health", tags=["Health"])
+def health():
+    """Лёгкий healthcheck без обращения к БД."""
+    return {"status": "ok"}
+
+
+# Локальный запуск (на Railway не используется)
 if __name__ == "__main__":
-    logger.info("🚀 Запуск BssMiniApp API на http://0.0.0.0:8000")
-    try:
-        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-    except Exception:
-        logger.exception("❌ Ошибка при запуске Uvicorn")
+    logger.info("🚀 Запуск BssMiniApp API (локально)")
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
