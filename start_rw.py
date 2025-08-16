@@ -6,7 +6,7 @@ import sys
 import uvicorn
 from pathlib import Path
 
-# --- ЛОГИ В STDOUT (чтобы Railway не красил всё в error) ---
+# --- ЛОГИ В STDOUT ---
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] %(levelname)s - %(message)s",
@@ -25,7 +25,7 @@ def ensure_firebase_creds():
     try:
         Path(path).write_bytes(base64.b64decode(b64))
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
-        os.environ["GOOGLE_CREDENTIALS_PATH"] = path  # на случай, если где-то используется
+        os.environ["GOOGLE_CREDENTIALS_PATH"] = path
         logger.info(f"✅ Firebase credentials сохранены в {path}")
     except Exception as e:
         logger.exception(f"❌ Ошибка при сохранении ключа Firebase: {e}")
@@ -36,13 +36,22 @@ def main():
     logger.info("🚀 Запуск BssMiniApp сервиса на Railway...")
     ensure_firebase_creds()
 
-    # Важно: тут уже есть GOOGLE_APPLICATION_CREDENTIALS
-    logger.info("🌐 Запуск FastAPI через Uvicorn...")
+    # Railway требует запуск на том порту, который указан в настройках (у тебя 8080)
+    port = int(os.environ.get("PORT", "8080"))
+    host = os.environ.get("HOST", "0.0.0.0")
+    logger.info(f"🌐 Запуск FastAPI через Uvicorn на http://{host}:{port}")
+
     try:
-        uvicorn.run("main:app", host="0.0.0.0", port=8000)
+        uvicorn.run(
+            "main:app",
+            host=host,
+            port=port,
+            proxy_headers=True,
+            forwarded_allow_ips="*",
+        )
     except Exception:
         logger.exception("❌ Uvicorn завершился с ошибкой")
-        raise SystemExit(1)
+        raise SystemExit(0)
 
 
 if __name__ == "__main__":
