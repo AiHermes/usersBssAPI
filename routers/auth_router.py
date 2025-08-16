@@ -10,8 +10,10 @@ import json
 
 router = APIRouter()
 
+
 class InitDataRequest(BaseModel):
     init_data: str
+
 
 @router.post("/auth/telegram")
 async def telegram_auth(data: InitDataRequest):
@@ -19,14 +21,12 @@ async def telegram_auth(data: InitDataRequest):
     print(f"📥 Raw init_data (incoming): {data.init_data[:300]}...")
 
     if data.init_data.strip().lower() == "test":
-        # В тестовом режиме покажем вариант 'ok'
         return {
             "ok": "ok",
             "telegram_id": "123456789",
             "firebase_token": "example_token_for_testing_purposes"
         }
 
-    # Разбор initData (не обязателен для логики, просто лог)
     try:
         parsed_data = urllib.parse.parse_qs(data.init_data)
         parsed_dict = {k: v[0] for k, v in parsed_data.items()}
@@ -60,25 +60,21 @@ async def telegram_auth(data: InitDataRequest):
     telegram_id = user_info.get("id")
     print(f"🆔 Telegram ID: {telegram_id}")
 
-    # ✅ Новая логика: проверяем наличие пользователя и статус до получения токена
     exists, status_tgbss, user_path, _ = find_user_and_status(int(telegram_id))
 
     if not exists:
-        # нет записи в БД — отправляем в бота регистрироваться
         return {
             "ok": "noregbot",
             "telegram_id": str(telegram_id),
         }
 
     if str(status_tgbss).lower() != "active":
-        # запись есть, но статус не активен — бот «выключен»
         return {
             "ok": "botisoff",
             "telegram_id": str(telegram_id),
             "status_tgbss": status_tgbss,
         }
 
-    # всё ок — выдаём кастом‑токен Firebase
     firebase_token = create_custom_token(telegram_id)
     print("🔑 Firebase token generated.")
     return {

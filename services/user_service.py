@@ -1,10 +1,10 @@
 # filename: services/user_service.py
 from typing import Optional, Tuple, Dict
-from google.cloud import firestore
-from services.wallet_service import create_new_wallet_for_user  # подключаем генератор кошелька
+from services.wallet_service import create_new_wallet_for_user
+from services.firebase_service import get_db_client
 
 USERS_COLLECTION = "telegram_users"
-db = firestore.Client()
+db = get_db_client()
 
 def find_user_and_status(telegram_id: int) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict]]:
     """
@@ -64,7 +64,7 @@ def _maybe_create_wallet(user_id: str, data: Dict) -> None:
 
 def _is_status_active(value) -> bool:
     """
-    Приводим к логике: True, 'active', 'enabled', 'true', 1 — активный статус.
+    Приводим к логике: True, 'active', 'enabled', 'true', 'on', 1 — активный статус.
     """
     if isinstance(value, bool):
         return value

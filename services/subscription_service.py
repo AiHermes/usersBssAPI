@@ -1,7 +1,7 @@
-# services/subscription_service.py
+# filename: services/subscription_service.py
 import logging
 from datetime import datetime, timedelta, timezone
-from config import get_db_client
+from services.firebase_service import get_db_client
 from firebase_admin import firestore
 
 def purchase_subscription(telegram_id: str, shop_id: str) -> dict:

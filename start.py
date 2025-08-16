@@ -1,4 +1,5 @@
-import os, base64, subprocess
+# filename: start.py
+import os, sys, base64, subprocess
 from pathlib import Path
 
 # 1) Подтянуть .env (если есть)
@@ -30,4 +31,9 @@ host = os.environ.get("HOST", "0.0.0.0")
 port = os.environ.get("PORT", "8000")
 
 print(f"🚀 Запуск {app_module} на http://{host}:{port}")
-subprocess.run(["uvicorn", app_module, "--host", host, "--port", port], check=True)
+try:
+    # check=False, чтобы не бросать исключение при остановке
+    subprocess.run(["uvicorn", app_module, "--host", host, "--port", port], check=False)
+except KeyboardInterrupt:
+    print("🛑 Остановлено пользователем (Ctrl+C)")
+    sys.exit(0)

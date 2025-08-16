@@ -1,21 +1,17 @@
-# main.py
 import logging
 import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from config import get_db_client, setup_logger
+from config import get_db_client  # setup_logger не нужен, мы сами настроим stdout-хендлер
 
-# 🟢 Инициализация логгера с выводом в stdout
-def setup_stdout_logger():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s] %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)]
-    )
-
-setup_stdout_logger()
+# 🟢 Логи в STDOUT (Railway не будет помечать их как error)
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
 logger = logging.getLogger("BssMiniApp")
 
 # Импорт роутеров
@@ -33,7 +29,7 @@ from routers import (
 app = FastAPI(
     title="BssMiniApp API",
     description="Сервис для генерации кошельков и обработки API для BssMiniApp.",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # CORS настройки
@@ -64,15 +60,9 @@ def read_root():
     db = get_db_client()
     if not db:
         logger.warning("[ROOT] ❌ Не удалось подключиться к базе данных.")
-        return {
-            "status": "error",
-            "message": "Failed to connect to Database"
-        }
+        return {"status": "error", "message": "Failed to connect to Database"}
     logger.info("[ROOT] ✅ API готов к работе.")
-    return {
-        "status": "ok",
-        "message": "Welcome to BssMiniApp API"
-    }
+    return {"status": "ok", "message": "Welcome to BssMiniApp API"}
 
 if __name__ == "__main__":
     logger.info("🚀 Запуск BssMiniApp API на http://0.0.0.0:8000")

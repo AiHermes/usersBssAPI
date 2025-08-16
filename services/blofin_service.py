@@ -1,4 +1,4 @@
- # blofin_service.py
+# filename: services/blofin_service.py
 import os
 import logging
 import hmac
@@ -9,14 +9,14 @@ import time
 import uuid
 import requests
 from datetime import datetime, timedelta, timezone
-from google.cloud import firestore
 from dotenv import load_dotenv
+from services.firebase_service import get_db_client
 
 # Загрузка .env переменных
 load_dotenv()
 
-# Инициализация Firestore
-db = firestore.Client()
+# Инициализация Firestore через единый сервис
+db = get_db_client()
 
 # Ключи из .env
 API_KEY = os.getenv("BLOFIN_API_KEY")
@@ -28,11 +28,13 @@ BONUS_IMAGE_URL = "https://firebasestorage.googleapis.com/v0/b/bss2025-b1285.fir
 if not all([API_KEY, API_SECRET, API_PASSPHRASE]):
     logging.error("❌ Не заданы переменные окружения для BloFin API")
 
+
 def create_signature(path: str, method: str, timestamp: str, nonce: str, body: dict | None = None) -> str:
     body_str = json.dumps(body, separators=(',', ':')) if body else ''
     prehash = f"{path}{method}{timestamp}{nonce}{body_str}"
     hex_digest = hmac.new(API_SECRET.encode(), prehash.encode(), hashlib.sha256).hexdigest()
     return base64.b64encode(hex_digest.encode()).decode()
+
 
 def find_uid_info(target_uid: str, limit: int = 30, max_pages: int = 50) -> dict | None:
     base_path = "/api/v1/affiliate/invitees"
@@ -67,6 +69,7 @@ def find_uid_info(target_uid: str, limit: int = 30, max_pages: int = 50) -> dict
             break
     return None
 
+
 def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
     logging.info(f"[BLOFIN] Привязка UID {blofin_uid} к Telegram ID {telegram_id}")
     uid_info = find_uid_info(blofin_uid)
@@ -89,8 +92,11 @@ def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
             if doc.id != telegram_id:
                 logging.warning(f"[BLOFIN] UID {blofin_uid} уже использован другим пользователем: {doc.id}")
                 user_ref.update({"blofin_uid": str(blofin_uid)})
-                _write_alerts_and_messages(user_ref, telegram_id,
-                    "⚠️ UID BloFin использован ранее. 🎁 Бонус в 4 дня не предоставляется.")
+                _write_alerts_and_messages(
+                    user_ref,
+                    telegram_id,
+                    "⚠️ UID BloFin использован ранее. 🎁 Бонус в 4 дня не предоставляется."
+                )
                 return {"status": "success", "telegram_id": telegram_id, "uid": blofin_uid}
 
         # Обновляем UID и KYC
@@ -102,8 +108,11 @@ def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
         # Проверка blofin4days
         if user_doc.to_dict().get("blofin4days", False):
             logging.info("[BLOFIN] ⚠️ Бонус уже был начислен ранее")
-            _write_alerts_and_messages(user_ref, telegram_id,
-                "🎉 Новый UID BloFin успешно привязан. 🎁 Бонус в 4 дня уже был начислен ранее — повторное начисление не предусмотрено")
+            _write_alerts_and_messages(
+                user_ref,
+                telegram_id,
+                "🎉 Новый UID BloFin успешно привязан. 🎁 Бонус в 4 дня уже был начислен ранее — повторное начисление не предусмотрено"
+            )
             return {"status": "success", "telegram_id": telegram_id, "uid": blofin_uid}
 
         # Проверка, был ли UID использован ранее
@@ -112,14 +121,19 @@ def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
             if other_user.id == telegram_id:
                 continue
             history_ref = other_user.reference.collection("subscriptionHistory")
-            bonus_found = list(history_ref
+            bonus_found = list(
+                history_ref
                 .where("shopID", "==", "4blofinAihermesPro")
-                .where("blofinuid", "==", str(blofin_uid)).limit(1).stream())
+                .where("blofinuid", "==", str(blofin_uid)).limit(1).stream()
+            )
             if bonus_found:
                 logging.warning(f"[BLOFIN] UID {blofin_uid} использован ранее другим")
                 user_ref.update({"blofin_uid": str(blofin_uid)})
-                _write_alerts_and_messages(user_ref, telegram_id,
-                    "⚠️ UID BloFin использован ранее. 🎁 Бонус в 4 дня не предоставляется.")
+                _write_alerts_and_messages(
+                    user_ref,
+                    telegram_id,
+                    "⚠️ UID BloFin использован ранее. 🎁 Бонус в 4 дня не предоставляется."
+                )
                 return {"status": "success", "telegram_id": telegram_id, "uid": blofin_uid}
 
         # Продление подписки
@@ -145,7 +159,7 @@ def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
             subs_ref.document().set({
                 "subscription_type": "AIHermesPRO",
                 "end_date": end_date,
-                "tvEndData": False  # Проставим явно False, чтобы формат соответствовал скриншоту
+                "tvEndData": False
             })
             logging.info(f"[BLOFIN] 🆕 Создана новая подписка до {end_date}")
 
@@ -160,8 +174,11 @@ def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
         logging.info("[BLOFIN] 🧾 Запись в subscriptionHistory")
 
         # Alerts + Messages
-        _write_alerts_and_messages(user_ref, telegram_id,
-            "🎉 Спасибо за регистрацию на бирже BloFin! 🎁 Вам начислены 4 дня подписки на AIHermesPro!")
+        _write_alerts_and_messages(
+            user_ref,
+            telegram_id,
+            "🎉 Спасибо за регистрацию на бирже BloFin! 🎁 Вам начислены 4 дня подписки на AIHermesPro!"
+        )
 
         # Обновление флага
         user_ref.update({"blofin4days": True})
@@ -172,7 +189,8 @@ def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
         logging.exception("[BLOFIN] ❌ Ошибка при начислении бонуса")
         return {"status": "error", "message": "Firestore error"}
 
-def _write_alerts_and_messages(user_ref, telegram_id, message_text):
+
+def _write_alerts_and_messages(user_ref, telegram_id: str, message_text: str):
     now = datetime.now(timezone.utc)
     user_ref.collection("alerts").add({
         "message": message_text,
@@ -190,4 +208,4 @@ def _write_alerts_and_messages(user_ref, telegram_id, message_text):
         "status": "pending",
         "telegram_id": telegram_id
     })
-    logging.info(f"[BLOFIN] 💬 Создано сообщение для Telegram")
+    logging.info("[BLOFIN] 💬 Создано сообщение для Telegram")

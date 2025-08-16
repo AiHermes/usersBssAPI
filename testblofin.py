@@ -1,3 +1,4 @@
+# filename: services/blofin_service.py
 import os
 import logging
 import hmac
@@ -7,14 +8,14 @@ import uuid
 import json
 import time
 import requests
-from google.cloud import firestore
 from dotenv import load_dotenv
+from services.firebase_service import get_db_client
 
 # Загрузка переменных окружения
 load_dotenv()
 
-# Firestore клиент
-db = firestore.Client()
+# Firestore клиент (через общий сервис)
+db = get_db_client()
 
 # Получение ключей из .env
 BLOFIN_API_KEY = os.getenv("BLOFIN_API_KEY")
@@ -51,7 +52,6 @@ def check_blofin_uid(uid_to_find: str, max_pages: int = 100) -> dict:
     path = "/api/v1/affiliate/invitees"
     method = "GET"
     page = 1
-    found = False
     before = None
 
     for attempt in range(max_pages):
@@ -68,9 +68,7 @@ def check_blofin_uid(uid_to_find: str, max_pages: int = 100) -> dict:
             "Content-Type": "application/json"
         }
 
-        query_params = {
-            "limit": "30",
-        }
+        query_params = {"limit": "30"}
         if before:
             query_params["before"] = before
 
@@ -82,7 +80,7 @@ def check_blofin_uid(uid_to_find: str, max_pages: int = 100) -> dict:
             logging.info(f"[BLOFIN] Статус ответа: {response.status_code}")
             data = response.json()
             logging.info(f"[BLOFIN] Ответ: {data}")
-        except Exception as e:
+        except Exception:
             logging.exception("[BLOFIN] ❌ Ошибка при отправке запроса или чтении ответа")
             return {"status": "error", "error": "Request failed"}
 
@@ -95,10 +93,8 @@ def check_blofin_uid(uid_to_find: str, max_pages: int = 100) -> dict:
 
         for user in invitees:
             if str(user.get("uid")) == str(uid_to_find):
-                found = True
                 return {"status": "success", "uid": uid_to_find, "data": user}
 
-        # для следующей страницы
         before = str(invitees[-1].get("id"))
         page += 1
 
@@ -122,6 +118,6 @@ def link_blofin_uid(telegram_id: str, blofin_uid: str) -> dict:
         logging.info("[BLOFIN] ✅ UID успешно сохранён в Firestore")
 
         return {"status": "success", "telegram_id": telegram_id, "uid": blofin_uid}
-    except Exception as e:
+    except Exception:
         logging.exception("[BLOFIN] ❌ Ошибка при сохранении UID в Firestore")
         return {"status": "error", "message": "Firestore error"}
