@@ -19,7 +19,7 @@ def _iter_bot_tokens() -> List[str]:
     if single:
         tokens.append(single)
 
-    # Убираем дубликаты, сохраняя порядок
+    # убрать дубликаты, сохранив порядок
     seen = set()
     uniq = []
     for t in tokens:
@@ -46,7 +46,7 @@ def validate_telegram_init_data(init_data: str) -> Optional[Dict]:
     Спецификация: https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
 
     Алгоритм:
-      secret_key = HMAC_SHA256(key=bot_token, msg="WebAppData")
+      secret_key = HMAC_SHA256(key="WebAppData", msg=bot_token)
       calc_hash  = HMAC_SHA256(key=secret_key, msg=data_check_string)
       сравнить calc_hash с присланным 'hash' (hex).
     """
@@ -56,7 +56,6 @@ def validate_telegram_init_data(init_data: str) -> Optional[Dict]:
         return None
 
     try:
-        # Разбираем query-string в dict (по одному значению на ключ)
         parsed_qs = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
         print(f"📥 Исходные данные: {parsed_qs}")
 
@@ -69,16 +68,14 @@ def validate_telegram_init_data(init_data: str) -> Optional[Dict]:
         print("📤 Строка для проверки подписи (data_check_string):")
         print(dcs)
 
-        # Пробуем валидацию последовательно всеми известными токенами
         for idx, token in enumerate(tokens, start=1):
-            # 1) правильный расчёт секретного ключа
+            # ✅ ПРАВИЛЬНЫЙ расчёт secret_key
             secret_key = hmac.new(
-                key=token.encode("utf-8"),
-                msg=b"WebAppData",
+                key=b"WebAppData",
+                msg=token.encode("utf-8"),
                 digestmod=hashlib.sha256
             ).digest()
 
-            # 2) расчёт контрольной суммы для data_check_string
             calculated_hash = hmac.new(
                 key=secret_key,
                 msg=dcs.encode("utf-8"),
@@ -90,7 +87,6 @@ def validate_telegram_init_data(init_data: str) -> Optional[Dict]:
 
             if hmac.compare_digest(calculated_hash, received_hash):
                 print(f"✅ Подпись подтверждена токеном #{idx} — данные валидны")
-                # Можно дополнительно распарсить поле 'user' (если нужно словарь)
                 return parsed_qs
 
         print("❌ Подпись не совпала ни с одним из токенов — данные не подлинные")
