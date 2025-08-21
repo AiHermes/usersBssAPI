@@ -1,56 +1,100 @@
-## services/auth_service.py
+# services/auth_service.py
 import hmac
 import hashlib
 import urllib.parse
-import json
 import os
-from typing import Optional, Dict
+from typing import Optional, Dict, List
+
+def _iter_bot_tokens() -> List[str]:
+    """
+    Возвращает список токенов-ботов, с которыми нужно уметь валидировать initData.
+    - BOT_TOKENS: список через запятую
+    - BOT_TOKEN: одиночный токен (fallback)
+    """
+    tokens: List[str] = []
+    multi = os.getenv("BOT_TOKENS", "")
+    if multi:
+        tokens += [t.strip() for t in multi.split(",") if t.strip()]
+    single = os.getenv("BOT_TOKEN", "").strip()
+    if single:
+        tokens.append(single)
+
+    # Убираем дубликаты, сохраняя порядок
+    seen = set()
+    uniq = []
+    for t in tokens:
+        if t not in seen:
+            uniq.append(t)
+            seen.add(t)
+    return uniq
+
+def _build_data_check_string(parsed_qs: Dict[str, str]) -> str:
+    """
+    Формирует data_check_string: все пары key=value (кроме 'hash'),
+    отсортированные по ключу, соединённые \n.
+    """
+    items = []
+    for k in sorted(parsed_qs.keys()):
+        if k == "hash":
+            continue
+        items.append(f"{k}={parsed_qs[k]}")
+    return "\n".join(items)
 
 def validate_telegram_init_data(init_data: str) -> Optional[Dict]:
     """
     Валидация initData, полученной от Telegram WebApp.
-    Алгоритм реализован строго по спецификации Telegram:
-    https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
+    Спецификация: https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
+
+    Алгоритм:
+      secret_key = HMAC_SHA256(key=bot_token, msg="WebAppData")
+      calc_hash  = HMAC_SHA256(key=secret_key, msg=data_check_string)
+      сравнить calc_hash с присланным 'hash' (hex).
     """
-    bot_token = os.getenv("BOT_TOKEN")
-    if not bot_token:
-        print("❌ BOT_TOKEN не найден в переменных окружения")
+    tokens = _iter_bot_tokens()
+    if not tokens:
+        print("❌ Не найдены токены ботов. Установите BOT_TOKEN или BOT_TOKENS")
         return None
 
     try:
-        # Разбор строки initData в словарь
+        # Разбираем query-string в dict (по одному значению на ключ)
         parsed_qs = dict(urllib.parse.parse_qsl(init_data, keep_blank_values=True))
         print(f"📥 Исходные данные: {parsed_qs}")
 
-        received_hash = parsed_qs.pop("hash", None)
+        received_hash = parsed_qs.get("hash")
         if not received_hash:
-            print("❌ Параметр hash отсутствует в initData")
+            print("❌ Параметр 'hash' отсутствует в initData")
             return None
 
-        # Оставшиеся поля форматируются как "ключ=значение"
-        # и сортируются в алфавитном порядке ключей
-        data_check_list = [f"{k}={v}" for k, v in sorted(parsed_qs.items())]
-        data_check_string = "\n".join(data_check_list)
-
+        dcs = _build_data_check_string(parsed_qs)
         print("📤 Строка для проверки подписи (data_check_string):")
-        print(data_check_string)
+        print(dcs)
 
-        # Ключ: HMAC_SHA256("WebAppData", bot_token)
-        secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+        # Пробуем валидацию последовательно всеми известными токенами
+        for idx, token in enumerate(tokens, start=1):
+            # 1) правильный расчёт секретного ключа
+            secret_key = hmac.new(
+                key=token.encode("utf-8"),
+                msg=b"WebAppData",
+                digestmod=hashlib.sha256
+            ).digest()
 
-        # Вычисляем контрольный хеш
-        calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+            # 2) расчёт контрольной суммы для data_check_string
+            calculated_hash = hmac.new(
+                key=secret_key,
+                msg=dcs.encode("utf-8"),
+                digestmod=hashlib.sha256
+            ).hexdigest()
 
-        print(f"🔑 Хеш от Telegram: {received_hash}")
-        print(f"🔐 Вычисленный HMAC: {calculated_hash}")
+            print(f"🔑 Хеш от Telegram: {received_hash}")
+            print(f"🔐 Вычисленный HMAC токеном #{idx}: {calculated_hash}")
 
-        # Сравнение с использованием безопасной функции
-        if not hmac.compare_digest(calculated_hash, received_hash):
-            print("❌ Подпись не совпадает — данные не подлинные")
-            return None
+            if hmac.compare_digest(calculated_hash, received_hash):
+                print(f"✅ Подпись подтверждена токеном #{idx} — данные валидны")
+                # Можно дополнительно распарсить поле 'user' (если нужно словарь)
+                return parsed_qs
 
-        print("✅ Подпись подтверждена — данные валидны")
-        return parsed_qs
+        print("❌ Подпись не совпала ни с одним из токенов — данные не подлинные")
+        return None
 
     except Exception as e:
         print(f"💥 Ошибка при валидации данных: {e}")
