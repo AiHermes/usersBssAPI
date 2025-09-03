@@ -26,6 +26,8 @@ from routers import (
     bingx_router,
     auth_router,
 )
+# 🔹 SD-роутер подключаем напрямую (не зависит от __all__ в routers/__init__.py)
+from routers.sd_router import router as sd_router
 
 app = FastAPI(
     title="BssMiniApp API",
@@ -52,6 +54,8 @@ app.include_router(bybit_router.router, prefix="/api/bybit", tags=["Bybit"])
 app.include_router(user_router.router, prefix="/api", tags=["Users"])
 app.include_router(bingx_router.router, prefix="/api/bingx", tags=["BingX"])
 app.include_router(auth_router.router, prefix="/api", tags=["Auth"])
+# 🔹 Новый сервис-деск роутер — /api/sd/notify
+app.include_router(sd_router, prefix="/api", tags=["ServiceDesk"])
 logger.info("✅ Все роутеры подключены")
 
 
